@@ -1,0 +1,5 @@
+node_modules
+dist
+*.local
+dev-server.env
+.DS_Store

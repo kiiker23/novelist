@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interactive Novel Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        darkPanel: '#1e293b',
+                        primary: '#3b82f6',
+                        accent: '#8b5cf6'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-darkBg text-slate-200 h-screen font-sans overflow-hidden flex flex-col">
+
+    <!-- Navbar -->
+    <header class="bg-darkPanel border-b border-slate-700 p-4 flex justify-between items-center shadow-lg shrink-0">
+        <h1 class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
+            <i class="fa-solid fa-book-journal-whills mr-2 text-primary"></i>OmniNovel Engine
+        </h1>
+        <div class="flex gap-3">
+            <!-- Live local-API status badge (auto-detected at startup) -->
+            <button id="api-badge" onclick="UIManager.toggleSettings()" class="hidden whitespace-nowrap px-3 py-1.5 rounded text-sm transition border items-center gap-1.5" title="Scanning for local AI servers..."></button>
+            <button onclick="StorageModule.exportSave()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition"><i class="fa-solid fa-download mr-1"></i> Export State</button>
+            <label class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition cursor-pointer">
+                <i class="fa-solid fa-upload mr-1"></i> Import State
+                <input type="file" id="import-file" class="hidden" accept=".json" onchange="StorageModule.importSave(event)">
+            </label>
+            <button onclick="UIManager.toggleSettings()" class="px-3 py-1.5 bg-primary hover:bg-blue-600 rounded text-sm transition shadow-lg shadow-blue-500/20"><i class="fa-solid fa-gear mr-1"></i> API Settings</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 flex overflow-hidden relative">
+
+        <!-- Screen 1: Setup/Generator Config -->
+        <div id="setup-screen" class="absolute inset-0 z-10 bg-darkBg overflow-y-auto p-6 flex justify-center">
+            <div class="max-w-4xl w-full space-y-6 pb-20">
+                <div id="resume-banner" class="hidden bg-emerald-950/40 border border-emerald-600/40 text-emerald-200 px-4 py-3 rounded-lg flex items-center justify-between gap-4">
+                    <span class="text-sm"><i class="fa-solid fa-clock-rotate-left mr-2"></i>An autosaved session was found.</span>
+                    <div class="flex gap-2 shrink-0">
+                        <button onclick="GameEngine.resumeAutosave()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-semibold transition">Resume</button>
+                        <button onclick="GameEngine.startFresh()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs transition">Start Fresh</button>
+                    </div>
+                </div>
+
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-2">Initialize Novel Universe</h2>
+                    <p class="text-slate-400">Define the world, your character, and the rules of the simulation.</p>
+                </div>
+
+                <!-- Template Library -->
+                <div class="bg-darkPanel rounded-xl border border-yellow-600/40 shadow-xl overflow-hidden">
+                    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700 bg-yellow-500/5">
+                        <h3 class="font-bold text-yellow-400 flex items-center gap-2"><i class="fa-solid fa-layer-group"></i>Template Library <span id="tpl-count" class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded font-mono">0</span></h3>
+                        <div class="flex gap-2">
+                            <button onclick="TemplateModule.exportTemplates()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs transition"><i class="fa-solid fa-file-export mr-1"></i>Export</button>
+                            <label class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs transition cursor-pointer"><i class="fa-solid fa-file-import mr-1"></i>Import<input type="file" class="hidden" accept=".json" onchange="TemplateModule.importTemplates(event)"></label>
+                            <button onclick="TemplateModule.openSaveModal()" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 rounded text-xs font-semibold transition"><i class="fa-solid fa-floppy-disk mr-1"></i>Save Current</button>
+                            <button onclick="TemplateModule.togglePanel()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs transition"><i id="tpl-chevron" class="fa-solid fa-chevron-up"></i></button>
+                        </div>
+                    </div>
+                    <div id="tpl-panel-body" class="p-4 hidden"><div id="template-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1"><div class="col-span-full text-center text-slate-500 italic py-4 text-sm"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Loading...</div></div></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- World Settings -->
+                    <div class="bg-darkPanel p-5 rounded-xl border border-slate-700 shadow-xl">
+                        <h3 class="text-lg font-semibold border-b border-slate-600 pb-2 mb-4 text-primary"><i class="fa-solid fa-globe mr-2"></i>World Parameters</h3>
+
+                        <!-- Genre Selector -->
+                        <div class="mb-4">
+                            <h4 class="text-sm font-semibold text-slate-300 mb-2"><i class="fa-solid fa-masks-theater mr-1"></i>Genres & Themes</h4>
+                            <div class="flex items-center gap-3 mb-2">
+                                <span id="genre-count-label" class="text-xs text-slate-400">0 selected</span>
+                                <button onclick="GenreModule.clearAll()" class="text-xs text-slate-500 hover:text-slate-300 transition px-2 py-0.5 rounded hover:bg-slate-700">Clear</button>
+                            </div>
+                            <div id="genre-grid" class="flex flex-wrap gap-2 p-3 bg-slate-900/40 rounded-lg border border-slate-700 min-h-12"></div>
+                            <div id="genre-conflict-warning" class="hidden mt-3 p-3 bg-amber-900/20 border border-amber-600/40 rounded-lg text-xs text-amber-300 flex items-start gap-2">
+                                <div id="genre-conflict-text" class="leading-relaxed flex-1"></div>
+                                <button onclick="document.getElementById('genre-conflict-warning').classList.add('hidden')" class="text-amber-500 hover:text-amber-300 shrink-0"><i class="fa-solid fa-times"></i></button>
+                            </div>
+                            <div id="genre-unlocks" class="mt-3 flex flex-wrap gap-2 items-center min-h-5"></div>
+                            <!-- Hidden fields for buildFromUI compatibility -->
+                            <input type="hidden" id="setup-genre-tags" value="">
+                            <input type="hidden" id="setup-genre" value="">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">World Size</label>
+                                <input type="text" id="setup-world-size" value="Vast Continent" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Tech/Magic Stage</label>
+                                <input type="text" id="setup-tech-stage" value="Medieval Low-Magic" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">World Rules & Setting Details</label>
+                            <textarea id="setup-world-rules" rows="3" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-primary outline-none" placeholder="e.g. Magic is forbidden. Gods occasionally walk the earth..."></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 border-t border-slate-600 pt-4 mt-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Measurement System</label>
+                                <select id="setup-measurement" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm">
+                                    <option value="Metric">Metric (meters, kg, km/h, Celsius)</option>
+                                    <option value="Imperial">Imperial (feet, lbs, mph, Fahrenheit)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Starting Time</label>
+                                <input type="text" id="setup-time" value="Monday, March 17, 07:00" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Starting Location</label>
+                                <input type="text" id="setup-location" value="Starting Location" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Character Settings -->
+                    <div class="bg-darkPanel p-5 rounded-xl border border-slate-700 shadow-xl">
+                        <h3 class="text-lg font-semibold border-b border-slate-600 pb-2 mb-4 text-accent"><i class="fa-solid fa-user-astronaut mr-2"></i>Main Character (MC)</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Name & Title</label>
+                                <input type="text" id="setup-mc-name" value="Unnamed Protagonist" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Appearance & Backstory</label>
+                                <textarea id="setup-mc-appearance" rows="2" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm" placeholder="Describe your character's appearance and backstory..."></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Starting Inventory (JSON list format recommended for precise tracking)</label>
+                                <textarea id="setup-mc-inventory-json" rows="3" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs font-mono" placeholder="Leave blank for scenario-neutral defaults, or provide custom JSON..."></textarea>
+                            </div>
+                            <div class="grid grid-cols-5 gap-2">
+                                <div>
+                                    <label class="block text-xs text-slate-400 text-center" title="Cultivation Tier. Each tier gives +20% effective stats. Mortals start at 0.0.">Tier<i class="fa-solid fa-circle-info ml-1 text-slate-500"></i></label>
+                                    <input type="number" step="0.1" id="setup-mc-cultivation" value="0.0" class="w-full bg-slate-800 border border-emerald-600/50 rounded p-1 text-center text-sm text-emerald-400 font-bold">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-400 text-center">STR</label>
+                                    <input type="number" id="setup-stat-str" value="10" class="w-full bg-slate-800 border border-slate-600 rounded p-1 text-center text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-400 text-center">AGI</label>
+                                    <input type="number" id="setup-stat-agi" value="10" class="w-full bg-slate-800 border border-slate-600 rounded p-1 text-center text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-400 text-center">INT</label>
+                                    <input type="number" id="setup-stat-int" value="10" class="w-full bg-slate-800 border border-slate-600 rounded p-1 text-center text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-400 text-center">CHA</label>
+                                    <input type="number" id="setup-stat-cha" value="10" class="w-full bg-slate-800 border border-slate-600 rounded p-1 text-center text-sm">
+                                </div>
+                            </div>
+
+                            <!-- Secondary Stats -->
+                            <div class="border-t border-slate-600 pt-3">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <label class="text-xs font-medium text-slate-400">Secondary Attributes</label>
+                                    <span id="secondary-stat-note" class="text-[10px] text-slate-600">Genre-dependent</span>
+                                </div>
+                                <div id="secondary-stat-row" class="grid gap-2" style="grid-template-columns:repeat(4,1fr)">
+                                    <div id="stat-col-end">
+                                        <label class="block text-[10px] text-amber-400 text-center mb-1" title="Endurance: Stamina, pain tolerance, resistance to fatigue">END</label>
+                                        <input type="number" id="setup-stat-end" value="10" class="w-full bg-slate-800 border border-amber-800/40 rounded p-1 text-center text-sm text-amber-300">
+                                    </div>
+                                    <div id="stat-col-wil">
+                                        <label class="block text-[10px] text-violet-400 text-center mb-1" title="Willpower: Mental fortitude, qi control, resistance to fear/charm">WIL</label>
+                                        <input type="number" id="setup-stat-wil" value="10" class="w-full bg-slate-800 border border-violet-800/40 rounded p-1 text-center text-sm text-violet-300">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-yellow-400 text-center mb-1" title="Luck: Probability manipulation, critical hits, fortune">LCK</label>
+                                        <input type="number" id="setup-stat-lck" value="10" class="w-full bg-slate-800 border border-yellow-800/40 rounded p-1 text-center text-sm text-yellow-300">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-cyan-400 text-center mb-1" title="Perception: Awareness, spotting hidden things, sensing danger">PER</label>
+                                        <input type="number" id="setup-stat-per" value="10" class="w-full bg-slate-800 border border-cyan-800/40 rounded p-1 text-center text-sm text-cyan-300">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulation Toggles -->
+                <div class="bg-darkPanel p-5 rounded-xl border border-slate-700 shadow-xl mt-6">
+                    <h3 class="text-lg font-semibold border-b border-slate-600 pb-2 mb-4 text-emerald-400"><i class="fa-solid fa-sliders mr-2"></i>Engine Features & Mechanics</h3>
+                    <p class="text-xs text-slate-400 mb-4">Toggle how actively the AI tracks systems or enforces rules.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">MC Info & Rich Properties Tracking</div>
+                                <div class="text-xs text-slate-400">Lock and track structured inventory items, modifiers, and exact money.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                                <input type="checkbox" id="toggle-mcInfo" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-mcInfo" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Stat Checks & Difficulty</div>
+                                <div class="text-xs text-slate-400">AI determines success/fail based on stats vs opponent.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-statChecks" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-statChecks" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Health & Fatigue</div>
+                                <div class="text-xs text-slate-400">Track injuries and exhaustion levels dynamically.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-health" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-health" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Subskills Engine</div>
+                                <div class="text-xs text-slate-400">Derive skills (Seduction, Sneaking) from primary stats.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-subskills" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-subskills" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Time & Distance Tracking</div>
+                                <div class="text-xs text-slate-400">Enforce consistent travel times and logic.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-time" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-time" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Persistent Memory (Lorebook)</div>
+                                <div class="text-xs text-slate-400">AI extracts and remembers prices, facts, and relations.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-memory" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-memory" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Quest System</div>
+                                <div class="text-xs text-slate-400">AI tracks active quests, objectives, and rewards.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-quests" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-quests" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Equipment Slots</div>
+                                <div class="text-xs text-slate-400">13 equipment slots with stat bonuses and rarity tiers.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-equipment" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-equipment" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Economy & Transactions</div>
+                                <div class="text-xs text-slate-400">Currency tracking, buy/sell transactions, and price history.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-economy" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-economy" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">XP & Progression</div>
+                                <div class="text-xs text-slate-400">XP/leveling, skill points, learned skills, and cultivation breakthroughs.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-xp" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-xp" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">NPC Depth & Vacuum Safety</div>
+                                <div class="text-xs text-slate-400">NPC traits, relationships, schedules, and witness-based reactions.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-npcDepth" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-npcDepth" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">Descriptive Scenes</div>
+                                <div class="text-xs text-slate-400">Vivid environmental descriptions of each location, remembered and re-fed when you return.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-descriptiveScenes" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-descriptiveScenes" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700">
+                            <div>
+                                <div class="font-medium text-sm">NPC Schedules</div>
+                                <div class="text-xs text-slate-400">Logical time-of-day defaults: who's asleep, at school, or at work at this hour — gently, never as hard rules.</div>
+                            </div>
+                            <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                                <input type="checkbox" id="toggle-schedules" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                <label for="toggle-schedules" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-8">
+                    <button onclick="GameEngine.startGenerator()" class="bg-gradient-to-r from-primary to-accent hover:opacity-90 text-white font-bold py-3 px-10 rounded-full shadow-lg shadow-primary/30 transition transform hover:scale-105">
+                        Initialize Novel Sequence <i class="fa-solid fa-play ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 2: Active Play Interface -->
+        <div id="play-screen" class="hidden absolute inset-0 z-0 flex bg-darkBg">
+
+            <!-- Left Sidebar (Stats & Info) -->
+            <aside class="w-72 bg-darkPanel border-r border-slate-700 flex flex-col h-full overflow-y-auto hidden md:flex shrink-0">
+                <div class="p-4 border-b border-slate-700 sticky top-0 bg-darkPanel z-10">
+                    <!-- Phase 2: Token Meter -->
+                    <div class="mb-3 bg-slate-800/80 p-2 rounded border border-slate-700/50">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[9px] uppercase text-slate-500 font-bold tracking-wider"><i class="fa-solid fa-chart-area mr-1"></i>Prompt Size</span>
+                            <span id="token-meter-value" class="text-xs font-mono text-emerald-400">0 tokens</span>
+                        </div>
+                        <div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+                            <div id="token-meter-bar" class="h-1.5 rounded-full bg-emerald-400 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="text-right mt-0.5">
+                            <span id="token-meter-label" class="text-[9px] text-slate-500">~128,000 tokens remaining</span>
+                        </div>
+                    </div>
+                    <h2 class="font-bold text-accent text-lg" id="ui-mc-name">Lin Hao</h2>
+                    <p class="text-xs text-slate-400" id="ui-genre-label">Tier 0.2 | Xianxia</p>
+
+                    <div class="bg-slate-800 p-2.5 rounded border border-slate-700 shadow-inner mt-3 space-y-1.5">
+                        <div class="flex items-center text-sm">
+                            <i class="fa-solid fa-clock text-blue-400 w-5 text-center"></i>
+                            <span id="ui-time" class="font-mono text-blue-100 font-semibold tracking-wide">Monday, March 17, 07:00</span>
+                        </div>
+                        <div class="flex items-center text-xs">
+                            <i class="fa-solid fa-location-dot text-red-400 w-5 text-center"></i>
+                            <span id="ui-location" class="font-semibold text-slate-300 truncate" title="Current Location">MC's Bedroom</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 space-y-6">
+                    <!-- Descriptive Scenes: Current Scene Panel -->
+                    <div id="panel-scene" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Current Scene</h3>
+                        <div id="ui-scene-text" class="text-xs text-slate-300 leading-relaxed bg-slate-800/60 border border-slate-700/50 rounded p-2.5 italic max-h-40 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Status Bars -->
+                    <div id="panel-health" class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1"><span>Health</span><span id="ui-health-val">100/100</span></div>
+                            <div class="w-full bg-slate-800 rounded-full h-2"><div class="bg-red-500 h-2 rounded-full transition-all duration-300" id="ui-health-bar" style="width: 100%"></div></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1"><span>Fatigue</span><span id="ui-fatigue-val">0%</span></div>
+                            <div class="w-full bg-slate-800 rounded-full h-2"><div class="bg-yellow-500 h-2 rounded-full transition-all duration-300" id="ui-fatigue-bar" style="width: 0%"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- Core Stats -->
+                    <div id="panel-stats">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Core Attributes</h3>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div id="ui-str-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative"><span class="text-slate-400">STR</span><span id="ui-str" class="font-bold text-white">29</span></div>
+                            <div id="ui-agi-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative"><span class="text-slate-400">AGI</span><span id="ui-agi" class="font-bold text-white">29</span></div>
+                            <div id="ui-int-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative"><span class="text-slate-400">INT</span><span id="ui-int" class="font-bold text-white">34</span></div>
+                            <div id="ui-cha-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative"><span class="text-slate-400">CHA</span><span class="flex items-center gap-1.5"><span id="ui-cha" class="font-bold text-white">31</span><span id="ui-cha-bonus" class="hidden text-[9px] font-bold text-emerald-400 bg-emerald-400/15 border border-emerald-400/40 rounded px-1 leading-tight">+2</span></span></div>
+                        </div>
+                        <!-- Phase 6: Secondary Stats -->
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-3 mb-2 border-b border-slate-700 pb-1">Secondary Attributes</h3>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div id="ui-end-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative border border-amber-800/30"><span class="text-amber-400">END</span><span id="ui-end" class="font-bold text-amber-200">10</span></div>
+                            <div id="ui-wil-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative border border-violet-800/30"><span class="text-violet-400">WIL</span><span id="ui-wil" class="font-bold text-violet-200">10</span></div>
+                            <div id="ui-lck-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative border border-yellow-800/30"><span class="text-yellow-400">LCK</span><span id="ui-lck" class="font-bold text-yellow-200">10</span></div>
+                            <div id="ui-per-container" class="bg-slate-800 p-2 rounded flex justify-between cursor-help group relative border border-cyan-800/30"><span class="text-cyan-400">PER</span><span id="ui-per" class="font-bold text-cyan-200">10</span></div>
+                        </div>
+                        <!-- Phase 6: Genre tags -->
+                        <div id="ui-genre-tags" class="mt-2 flex flex-wrap gap-1"></div>
+                    </div>
+
+                    <!-- Subskills -->
+                    <div id="panel-subskills" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Derived Subskills</h3>
+                        <div class="space-y-1 text-sm text-slate-300" id="ui-subskills-list"></div>
+                    </div>
+
+                    <!-- Global Active Modifiers -->
+                    <div id="panel-modifiers">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Active Modifiers / Artifact State</h3>
+                        <ul class="text-sm space-y-2 text-slate-300" id="ui-modifiers-list">
+                            <li class="text-slate-500 italic text-xs">No active passive buffs.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Inventory -->
+                    <div id="panel-inventory">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Inventory</h3>
+                        <ul class="text-sm space-y-2 text-slate-300" id="ui-inventory-list"></ul>
+                    </div>
+
+                    <!-- Phase 3: Equipment Slots -->
+                    <div id="panel-equipment">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Equipment</h3>
+                        <div id="ui-equipment-list" class="space-y-1"></div>
+                    </div>
+
+                    <!-- Phase 3: Economy -->
+                    <div id="panel-economy">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Economy</h3>
+                        <ul class="text-sm space-y-1 text-slate-300 mb-3" id="ui-currency-list"></ul>
+                        <h4 class="text-[10px] uppercase text-slate-500 font-bold mb-1">Recent Transactions</h4>
+                        <ul class="text-[10px] space-y-1 text-slate-300" id="ui-transaction-log"></ul>
+                    </div>
+
+                    <!-- Phase 4: XP/Level Bar -->
+                    <div id="panel-xp" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Progression</h3>
+                        <div class="bg-slate-800 p-2.5 rounded border border-slate-700 shadow-inner mb-2">
+                            <div class="flex justify-between items-center mb-1">
+                                <span id="ui-level-badge" class="text-sm font-bold text-amber-400">Lv.1</span>
+                                <span id="ui-xp-val" class="text-[10px] text-slate-400 font-mono">0/100 XP</span>
+                            </div>
+                            <div class="w-full bg-slate-700/50 rounded-full h-2 overflow-hidden">
+                                <div id="ui-xp-bar" class="h-2 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between items-center mt-1.5">
+                                <span class="text-[9px] text-slate-500">Skill Points</span>
+                                <span id="ui-sp-val" class="text-[10px] text-accent font-bold">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phase 4: Cultivation/Skills Panel -->
+                    <div id="panel-cultivation" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Cultivation & Skills</h3>
+                        <div class="bg-slate-800 p-2.5 rounded border border-slate-700 shadow-inner mb-2">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[10px] text-slate-400">Cultivation</span>
+                                <span id="ui-cultivation-val" class="text-[10px] text-emerald-400 font-bold">0.0</span>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <h4 class="text-[10px] uppercase text-slate-500 font-bold mb-1">Breakthroughs</h4>
+                            <div id="ui-breakthrough-list" class="space-y-0.5"></div>
+                        </div>
+                        <div class="mb-2">
+                            <h4 class="text-[10px] uppercase text-slate-500 font-bold mb-1">Learned Skills</h4>
+                            <div id="ui-learned-skills-list" class="space-y-0.5"></div>
+                        </div>
+                        <div>
+                            <button type="button" onclick="UIManager.toggleSkillTree()" class="w-full flex items-center justify-between text-[10px] uppercase text-slate-500 font-bold mb-1 hover:text-slate-300 transition-colors" title="Show or hide the skill tree">
+                                <span>Skill Tree <span id="ui-skill-tree-count" class="normal-case font-medium text-slate-600"></span></span>
+                                <i id="ui-skill-tree-chevron" class="fa-solid fa-chevron-right text-[8px]"></i>
+                            </button>
+                            <div id="ui-skill-tree-body" class="hidden max-h-48 overflow-y-auto pr-0.5">
+                                <div id="ui-skill-tree-list" class="space-y-0.5"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Family: Household Panel (registered family of the MC) -->
+                    <div id="panel-household" class="hidden">
+                        <button type="button" onclick="UIManager.toggleHousehold()" class="w-full flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1 hover:text-slate-300 transition-colors" title="Show or hide the household">
+                            <span>Household</span>
+                            <i id="ui-household-chevron" class="fa-solid fa-chevron-down text-[8px]"></i>
+                        </button>
+                        <div id="ui-household-body">
+                            <div id="ui-household-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                        </div>
+                    </div>
+
+                    <!-- Phase 5: NPC Profiles Panel -->
+                    <div id="panel-npc" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">NPC Profiles</h3>
+                        <div id="ui-npc-list" class="space-y-1 max-h-64 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Phase 5: Time States Panel -->
+                    <div id="panel-time-states" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Active States</h3>
+                        <div id="ui-time-state-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Phase 5: Gift Log Panel -->
+                    <div id="panel-gifts" class="hidden">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Gift Log</h3>
+                        <div id="ui-gift-list" class="space-y-0.5 max-h-40 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Stat-Check Outcome Framework: Recent Checks Panel -->
+                    <div id="panel-checks" class="hidden">
+                        <button type="button" onclick="UIManager.toggleChecks()" class="w-full flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1 hover:text-slate-300 transition-colors" title="Show or hide the recent stat checks">
+                            <span>Recent Checks</span>
+                            <i id="ui-checks-chevron" class="fa-solid fa-chevron-down text-[8px]"></i>
+                        </button>
+                        <div id="ui-checks-body">
+                            <div id="ui-checks-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                        </div>
+                    </div>
+
+                    <!-- Episodic Action Memory: what the MC did, with whom, and how it went -->
+                    <div id="panel-action-memory" class="hidden">
+                        <div class="flex items-center justify-between mb-2 border-b border-slate-700 pb-1">
+                            <button type="button" onclick="UIManager.toggleActionMemory()" class="flex items-center text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors" title="Show or hide the MC's remembered actions">
+                                <span>Action Memory</span>
+                                <i id="ui-action-memory-chevron" class="fa-solid fa-chevron-down text-[8px] ml-2"></i>
+                            </button>
+                            <button type="button" onclick="UIManager.prepareComparison()" class="text-slate-500 hover:text-slate-200 transition-colors" title="Ask the AI to compare the current situation with past actions">
+                                <i class="fa-solid fa-scale-balanced"></i>
+                            </button>
+                        </div>
+                        <div id="ui-action-memory-body">
+                            <div id="ui-action-memory-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                        </div>
+                    </div>
+
+                    <!-- Economy History: the state-level story — systemPoints, item, and currency movements diffed from [STATE_UPDATE] each turn, side by side with the memory log -->
+                    <div id="panel-economy-history" class="hidden">
+                        <div class="flex items-center justify-between mb-2 border-b border-slate-700 pb-1">
+                            <button type="button" onclick="UIManager.toggleEconomyHistory()" class="flex items-center text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors" title="Show or hide the MC's recent economy movements (system points, items, currencies)">
+                                <span>Economy History</span>
+                                <i id="ui-economy-chevron" class="fa-solid fa-chevron-down text-[8px] ml-2"></i>
+                            </button>
+                        </div>
+                        <div id="ui-economy-body">
+                            <div id="ui-economy-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Chat/Story Area -->
+            <section class="flex-1 flex flex-col h-full bg-darkBg relative">
+                <!-- Error Banner: API/turn failures land here, never in the story feed -->
+                <div id="error-banner" class="hidden absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-950/90 border border-red-500/50 text-red-200 px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-3 z-30 max-w-lg">
+                    <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                    <span id="error-banner-text" class="text-sm"></span>
+                    <button onclick="UIManager.hideErrorBanner()" class="text-red-300 hover:text-white ml-2"><i class="fa-solid fa-times"></i></button>
+                </div>
+
+                <!-- Parse Notice: shown when the engine safely SKIPPED malformed AI JSON. Auto-dismisses. -->
+                <div id="parse-notice" class="hidden absolute top-16 left-1/2 transform -translate-x-1/2 bg-amber-950/90 border border-amber-500/50 text-amber-200 px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-3 z-30 max-w-lg">
+                    <i class="fa-solid fa-shield-halved text-amber-400"></i>
+                    <span id="parse-notice-text" class="text-sm"></span>
+                    <button onclick="UIManager.hideParseNotice()" class="text-amber-300 hover:text-white ml-2"><i class="fa-solid fa-times"></i></button>
+                </div>
+
+                <!-- Level Up / Breakthrough Notice -->
+                <div id="level-up-notice" class="hidden absolute top-24 left-1/2 transform -translate-x-1/2 bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-3 z-30 max-w-lg">
+                    <i class="fa-solid fa-star text-emerald-400"></i>
+                    <span id="level-up-text" class="text-sm font-semibold"></span>
+                    <button onclick="document.getElementById('level-up-notice').classList.add('hidden')" class="text-emerald-300 hover:text-white ml-2"><i class="fa-solid fa-times"></i></button>
+                </div>
+
+                <div id="story-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
+                    <div class="text-center text-slate-500 text-sm mt-10">Initializing Novel Engine...</div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div id="loading-indicator" class="hidden absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-slate-800 px-4 py-2 rounded-full border border-slate-600 shadow-lg flex items-center gap-2 z-20">
+                    <i class="fa-solid fa-circle-notch fa-spin text-primary"></i> <span class="text-sm text-slate-300">AI is writing...</span>
+                </div>
+
+                <!-- Input Area -->
+                <div class="shrink-0 p-4 bg-darkBg border-t border-slate-800 relative z-10 shadow-[0_-10px_30px_rgba(15,23,42,0.6)]">
+                    <form id="action-form" onsubmit="GameEngine.submitAction(event)" class="max-w-4xl mx-auto flex gap-2">
+                        <input type="text" id="user-input" class="flex-1 bg-darkPanel border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-lg transition" placeholder="What do you do or say?" autocomplete="off">
+                        <button type="button" onclick="UIManager.prepareComparison()" class="bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg px-4 py-3 transition flex items-center justify-center" title="Ask the AI to compare the current situation with past actions">
+                            <i class="fa-solid fa-scale-balanced"></i>
+                        </button>
+                        <button type="submit" class="bg-primary hover:bg-blue-600 text-white rounded-lg px-6 py-3 font-semibold shadow-lg transition flex items-center justify-center">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </form>
+
+                    <!-- Director's Note: optional author-injected world events (fed to the AI every turn) -->
+                    <form id="director-form" onsubmit="GameEngine.submitDirectorNote(event)" class="max-w-4xl mx-auto mt-2.5 flex items-center gap-2">
+                        <i class="fa-solid fa-clapperboard text-amber-500/60 text-xs shrink-0" title="Director's Note"></i>
+                        <input type="text" id="director-input" class="flex-1 bg-darkPanel/60 border border-dashed border-amber-500/25 rounded-lg px-3 py-1.5 text-xs text-amber-100/90 placeholder:text-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition" placeholder="Director's note (optional) — e.g. NPC x's birthday is in 2 days, a secret realm opens at midnight, a noble declares a tournament..." autocomplete="off">
+                        <button type="submit" class="bg-amber-900/40 hover:bg-amber-800/50 text-amber-300 border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-semibold shadow transition flex items-center gap-1.5 whitespace-nowrap">
+                            <i class="fa-solid fa-bolt"></i> Inject
+                        </button>
+                    </form>
+                    <div id="director-notes-list" class="max-w-4xl mx-auto flex flex-wrap gap-1.5 mt-1.5"></div>
+                </div>
+            </section>
+
+            <!-- Right Sidebar (Memory, Lore, Quests) -->
+            <aside class="w-64 bg-darkPanel border-l border-slate-700 flex flex-col h-full hidden lg:flex shrink-0">
+                <div class="p-0 border-b border-slate-700 sticky top-0 bg-darkPanel z-10">
+                    <h2 class="font-bold text-emerald-400 p-4 pb-2"><i class="fa-solid fa-brain mr-2"></i>Knowledge</h2>
+                    <div class="flex text-xs font-bold border-t border-slate-700">
+                        <button onclick="UIManager.switchLoreTab('facts')" id="tab-facts" class="flex-1 py-2 text-emerald-400 border-b-2 border-emerald-400 transition">Facts</button>
+                        <button onclick="UIManager.switchLoreTab('relations')" id="tab-relations" class="flex-1 py-2 text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition">Relations</button>
+                        <button onclick="UIManager.switchLoreTab('quests')" id="tab-quests" class="flex-1 py-2 text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition">Quests</button>
+                    </div>
+                </div>
+                <div class="p-4 overflow-y-auto flex-1 text-sm">
+                    <p class="text-xs text-slate-400 mb-4 italic" id="lore-desc">Persistent facts, distances, and prices extracted by the engine.</p>
+                    <ul id="ui-memory-list" class="space-y-3">
+                        <li class="text-slate-500 text-center italic">No facts established yet.</li>
+                    </ul>
+                    <ul id="ui-relation-list" class="space-y-3 hidden">
+                        <li class="text-slate-500 text-center italic">No relationships established.</li>
+                    </ul>
+                    <ul id="ui-quest-list" class="space-y-2 hidden">
+                        <li class="text-slate-500 text-center italic">No quests yet.</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <!-- Item Properties / Detail Modal -->
+    <div id="details-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-darkPanel border border-slate-700 rounded-xl p-6 max-w-md w-full shadow-2xl relative">
+            <button onclick="UIManager.toggleDetailsModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
+            <h2 class="text-xl font-bold mb-2 text-white" id="modal-item-name">Item Properties</h2>
+            <div id="modal-item-body" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-darkPanel border border-slate-700 rounded-xl p-6 max-w-2xl w-full shadow-2xl relative max-h-[85vh] overflow-y-auto">
+            <button onclick="UIManager.toggleSettings()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
+            <h2 class="text-xl font-bold mb-1 text-white"><i class="fa-solid fa-server mr-2"></i>API Configuration</h2>
+            <p class="text-xs text-slate-500 mb-4">Choose a provider, enter credentials, and save. Changes apply immediately to the next turn.</p>
+
+            <div class="space-y-4">
+                <!-- Provider Selection -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">AI Provider</label>
+                    <select id="api-provider" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-primary outline-none" onchange="UIManager.updateApiFields()">
+                        <!-- Free Tier -->
+                        <optgroup label="🆓 Free Tier">
+                            <option value="gemini">Google Gemini (Free — gemini-2.5-flash)</option>
+                            <option value="groq">Groq (Free — fast llama3/mixtral)</option>
+                            <option value="together">Together AI (Free tier — llama3 70B)</option>
+                        </optgroup>
+                        <!-- Paid Tier -->
+                        <optgroup label="💳 Paid Tier">
+                            <option value="openai">OpenAI (ChatGPT / GPT-4o)</option>
+                            <option value="claude">Anthropic Claude (Sonnet / Opus)</option>
+                            <option value="deepseek">DeepSeek (V4 Flash &mdash; key or env proxy)</option>
+                            <option value="mistral">Mistral AI (Large / Codestral)</option>
+                        </optgroup>
+                        <!-- Local / Self-Hosted -->
+                        <optgroup label="🖥️ Local / Self-Hosted">
+                            <option value="local">Local (Ollama / LM Studio)</option>
+                            <option value="custom">Custom OpenAI-Compatible Endpoint</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <!-- API Key (shown for paid providers) -->
+                <div id="api-key-container">
+                    <label class="block text-sm font-medium text-slate-300 mb-1">API Key</label>
+                    <input type="password" id="api-key" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm" placeholder="sk-...">
+                    <p class="text-xs text-slate-500 mt-1">Key is stored locally in your browser session only.</p>
+                </div>
+
+                <!-- Endpoint URL (shown for local/custom) -->
+                <div id="api-url-container" class="hidden">
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Endpoint URL</label>
+                    <input type="text" id="api-url" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm" placeholder="http://localhost:11434/api/chat">
+                </div>
+
+                <!-- Model Name -->
+                <div id="api-model-container">
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Model Name</label>
+                    <input type="text" id="api-model" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm" value="gemini-2.5-flash-preview-09-2025">
+                    <p id="api-model-hint" class="text-xs text-slate-500 mt-1">Enter the exact model identifier for your provider.</p>
+                </div>
+
+                <!-- Coherence retry toggle -->
+                <div class="mt-3 flex items-start gap-2 border-t border-slate-700/60 pt-3">
+                    <input type="checkbox" id="api-retry-rambling" class="mt-0.5 w-4 h-4 accent-blue-600 cursor-pointer" checked>
+                    <div>
+                        <label for="api-retry-rambling" class="text-sm text-slate-300 font-medium cursor-pointer">Retry when the model rambles</label>
+                        <p class="text-xs text-slate-500 mt-0.5">On by default. If the response opens with reasoning instead of story, the engine re-asks with a simpler prompt (one extra call). Disable on fast cloud models where rambling is rare.</p>
+                    </div>
+                </div>
+
+                <!-- Auto-Detect Local APIs (shown for local/custom providers) -->
+                <div id="api-detect-container" class="hidden border-t border-slate-700 pt-4">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <h3 class="text-sm font-bold text-emerald-400"><i class="fa-solid fa-radar mr-1"></i>Auto-Detect Local APIs</h3>
+                        <button type="button" id="api-detect-btn" onclick="UIManager.runLocalDetection()" class="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded text-xs font-semibold transition"><i class="fa-solid fa-magnifying-glass mr-1"></i>Scan Now</button>
+                    </div>
+                    <p id="api-detect-status" class="text-xs text-slate-400 mb-2">Scans common local AI servers (Ollama, LM Studio, llama.cpp, vLLM&hellip;) running on your machine and auto-fills the fields below.</p>
+                    <div id="api-detect-results" class="space-y-2"></div>
+
+                    <!-- LAN scan: probe other machines on the network -->
+                    <div class="mt-3 pt-3 border-t border-slate-700/60">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label for="api-lan-subnet" class="text-xs font-semibold text-slate-300">Scan Local Network</label>
+                            <button type="button" id="api-lan-btn" onclick="UIManager.runLanScan()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold transition"><i class="fa-solid fa-network-wired mr-1"></i>Scan Network</button>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-1.5">Probe other machines on your LAN for Ollama / LM Studio (e.g. <code class="text-emerald-400">192.168.1.0/24</code>). Remote Ollama must listen on the network (<code class="text-emerald-400">OLLAMA_HOST=0.0.0.0</code>) and allow the app&rsquo;s origin (<code class="text-emerald-400">OLLAMA_ORIGINS</code> — needed when the app is served from a LAN IP).</p>
+                        <input type="text" id="api-lan-subnet" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm font-mono" placeholder="192.168.1.0/24">
+                        <p id="api-lan-status" class="text-xs text-slate-400 mt-1.5"></p>
+                        <div id="api-lan-results" class="space-y-2 mt-2"></div>
+                    </div>
+                </div>
+
+                <!-- Test Connection -->
+                <div>
+                    <button type="button" id="api-test-btn" onclick="UIManager.testApiConnection()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 rounded transition"><i class="fa-solid fa-plug mr-1"></i>Test Connection</button>
+                    <p id="api-test-status" class="text-xs text-slate-400 mt-2 text-center"></p>
+                </div>
+
+                <!-- Save -->
+                <button onclick="GameEngine.saveApiSettings()" class="w-full bg-primary hover:bg-blue-600 text-white font-bold py-2 rounded mt-2 transition">Save Settings</button>
+
+                <!-- Back to Setup (no refresh) -->
+                <button onclick="GameEngine.returnToSetup()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-2 rounded transition"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Setup Page</button>
+            </div>
+
+            <!-- ====== LOCAL SETUP TUTORIAL ====== -->
+            <div class="mt-6 border-t border-slate-700 pt-4">
+                <h3 class="text-base font-bold text-emerald-400 mb-2"><i class="fa-solid fa-graduation-cap mr-1"></i> How to Connect Locally (Ollama Guide)</h3>
+                <div class="space-y-3 text-xs text-slate-300">
+                    <div>
+                        <strong class="text-slate-200">Step 1 — Install Ollama</strong>
+                        <p class="mt-1">Download from <a href="https://ollama.com" target="_blank" class="text-primary underline">ollama.com</a>. Run the installer and launch Ollama. It runs silently in your system tray.</p>
+                    </div>
+                    <div>
+                        <strong class="text-slate-200">Step 2 — Pull a Model</strong>
+                        <p class="mt-1">Open Command Prompt and run:</p>
+                        <code class="block bg-slate-900 p-2 rounded mt-1 text-emerald-400 font-mono">ollama pull llama3.2</code>
+                        <p class="mt-1 text-slate-500">Or for larger models: <code class="text-emerald-400">ollama pull mistral</code> / <code class="text-emerald-400">ollama pull codellama</code></p>
+                    </div>
+                    <div>
+                        <strong class="text-slate-200">Step 3 — Verify It's Running</strong>
+                        <p class="mt-1">Ollama exposes an API at <code class="text-emerald-400">http://localhost:11434</code> by default. Test it:</p>
+                        <code class="block bg-slate-900 p-2 rounded mt-1 text-emerald-400 font-mono">curl http://localhost:11434/api/tags</code>
+                        <p class="mt-1 text-slate-500">You should see a JSON list of your pulled models. If this fails, Ollama may not be running.</p>
+                    </div>
+                    <div>
+                        <strong class="text-slate-200">Step 4 — Firewall / Port Forwarding (if needed)</strong>
+                        <p class="mt-1">Ollama listens on <strong class="text-amber-400">port 11434</strong>. On Windows:</p>
+                        <ol class="list-decimal list-inside mt-1 space-y-1 text-slate-400">
+                            <li>Open <strong class="text-slate-200">Windows Defender Firewall → Advanced Settings</strong></li>
+                            <li>Inbound Rules → New Rule → Port → TCP → Specific local ports: <strong class="text-emerald-400">11434</strong></li>
+                            <li>Allow the connection → Apply to Domain/Private/Public → Name: <em>Ollama API</em></li>
+                        </ol>
+                        <p class="mt-2 text-slate-500">On Linux: <code class="text-emerald-400">sudo ufw allow 11434/tcp</code> or <code class="text-emerald-400">sudo iptables -A INPUT -p tcp --dport 11434 -j ACCEPT</code></p>
+                        <p class="mt-1 text-slate-500">To access from another machine on your network, use <code class="text-emerald-400">http://YOUR_IP:11434</code> instead of localhost.</p>
+                    </div>
+                    <div>
+                        <strong class="text-slate-200">Alternative: LM Studio</strong>
+                        <p class="mt-1">Download from <a href="https://lmstudio.ai" target="_blank" class="text-primary underline">lmstudio.ai</a>. Start the local server, and set the endpoint to <code class="text-emerald-400">http://localhost:1234/v1</code> (LM Studio uses OpenAI-compatible format).</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ====== PROVIDER QUICK REFERENCE ====== -->
+            <div class="mt-4 border-t border-slate-700 pt-4">
+                <h3 class="text-base font-bold text-amber-400 mb-2"><i class="fa-solid fa-bolt mr-1"></i> Provider Quick Reference</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-emerald-400">🆓 Gemini</strong> — Free tier: <code class="text-slate-300">gemini-2.5-flash</code><br>
+                        Key: <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-primary underline">aistudio.google.com</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-emerald-400">🆓 Groq</strong> — Free, blazing fast<br>
+                        Models: <code class="text-slate-300">llama-3.3-70b-versatile</code><br>
+                        Key: <a href="https://console.groq.com/keys" target="_blank" class="text-primary underline">console.groq.com</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-emerald-400">🆓 Together AI</strong> — Free credits<br>
+                        Models: <code class="text-slate-300">meta-llama/Llama-3.3-70B-Instruct-Turbo-Free</code><br>
+                        Key: <a href="https://api.together.xyz" target="_blank" class="text-primary underline">api.together.xyz</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-amber-400">💳 OpenAI</strong> — GPT-4o, o1<br>
+                        Key: <a href="https://platform.openai.com/api-keys" target="_blank" class="text-primary underline">platform.openai.com</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-amber-400">💳 Claude</strong> — Sonnet, Opus<br>
+                        Key: <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-primary underline">console.anthropic.com</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-amber-400">💳 DeepSeek</strong> — V3, R1 (cheap)<br>
+                        Key: <a href="https://platform.deepseek.com" target="_blank" class="text-primary underline">platform.deepseek.com</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-amber-400">💳 Mistral</strong> — Large, Codestral<br>
+                        Key: <a href="https://console.mistral.ai/api-keys" target="_blank" class="text-primary underline">console.mistral.ai</a>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded border border-slate-700">
+                        <strong class="text-blue-400">🖥️ Local</strong> — Ollama / LM Studio<br>
+                        URL: <code class="text-slate-300">http://localhost:11434/api/chat</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Save Modal -->
+    <div id="tpl-save-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-darkPanel border border-slate-700 rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <button onclick="TemplateModule.closeSaveModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
+            <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-floppy-disk mr-2"></i>Save Template</h3>
+            <input type="text" id="tpl-name-input" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm mb-4" placeholder="Template name...">
+            <div class="flex gap-2">
+                <button onclick="TemplateModule.confirmSave()" class="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 rounded transition">Save</button>
+                <button onclick="TemplateModule.closeSaveModal()" class="px-4 bg-slate-700 hover:bg-slate-600 text-white rounded transition">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Delete Modal -->
+    <div id="tpl-delete-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-darkPanel border border-red-800 rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 class="text-lg font-bold text-red-400 mb-2"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Delete Template</h3>
+            <p class="text-sm text-slate-300 mb-4">Are you sure you want to delete this template? This cannot be undone.</p>
+            <div class="flex gap-2">
+                <button id="delete-tpl-confirm-btn" class="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-2 rounded transition">Delete</button>
+                <button onclick="TemplateModule.closeDeleteModal()" class="px-4 bg-slate-700 hover:bg-slate-600 text-white rounded transition">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Family anchoring modal: shown when the MC backstory mentions family.
+         Preview each detected member (name + role) and let the player keep the
+         anchoring, start with a clean slate of NPCs, or edit the backstory. -->
+    <div id="family-anchor-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-darkPanel border border-slate-700 rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h2 class="text-lg font-bold mb-1 text-white"><i class="fa-solid fa-people-roof mr-2 text-emerald-400"></i>Anchor your family?</h2>
+            <p class="text-xs text-slate-500 mb-3">Your backstory mentions these family members. Anchor them as registered relationships so the AI never forgets them?</p>
+            <ul id="family-anchor-list" class="space-y-1.5 mb-4"></ul>
+            <p class="text-[10px] text-slate-600 mb-4">Your choice is remembered for this backstory — editing the backstory asks again.</p>
+            <div class="flex flex-col gap-2">
+                <button onclick="UIManager.resolveFamilyAnchoring('keep')" class="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-2 rounded transition"><i class="fa-solid fa-check mr-1"></i>Keep family</button>
+                <button onclick="UIManager.resolveFamilyAnchoring('clean')" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded transition"><i class="fa-solid fa-eraser mr-1"></i>Clean slate — no family NPCs</button>
+                <button onclick="UIManager.resolveFamilyAnchoring('edit')" class="w-full bg-transparent border border-slate-600 hover:border-slate-400 text-slate-300 font-semibold py-2 rounded transition"><i class="fa-solid fa-pen mr-1"></i>Edit backstory</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

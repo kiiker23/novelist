@@ -1,0 +1,76 @@
+/* Custom styles ported from the original <style> block. */
+
+/* Custom Scrollbar for immersive feel */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+.fact-flash { animation: flashFact 2s ease-out; }
+@keyframes flashFact {
+  0% { background-color: rgba(139, 92, 246, 0.5); }
+  100% { background-color: transparent; }
+}
+
+/* Toggle Switch Styles */
+.toggle-checkbox:checked { right: 0; border-color: #68d391; }
+.toggle-checkbox:checked + .toggle-label { background-color: #68d391; }
+.toggle-checkbox { right: 4px; z-index: 1; border-color: #e2e8f0; transition: all 0.3s; }
+.toggle-label { width: 3rem; height: 1.5rem; background-color: #cbd5e1; border-radius: 9999px; transition: all 0.3s; }
+
+/* Tooltip style improvements */
+.custom-tooltip { visibility: hidden; opacity: 0; transition: opacity 0.2s; }
+.group:hover .custom-tooltip { visibility: visible; opacity: 1; }
+
+/* Phase 6: Genre tag styles */
+.genre-tag {
+  transition: all 0.15s ease;
+  cursor: pointer;
+  user-select: none;
+  border-width: 1px;
+  border-style: solid;
+}
+.genre-tag:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+.genre-tag.conflict-active {
+  animation: conflictPulse 1.5s ease-in-out infinite;
+}
+@keyframes conflictPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3); }
+}
+
+.unlock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 600;
+  border-width: 1px;
+  border-style: solid;
+}
+
+/* Phase 6: Template card styles */
+.tpl-card {
+  transition: all 0.15s ease;
+}
+.tpl-card:hover {
+  border-color: #475569;
+  transform: translateY(-1px);
+}
+
+/* Phase 6: Stat box styles */
+.stat-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgb(30, 41, 59);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: help;
+  font-size: 0.875rem;
+}
